@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>报名管理端 · 一键导出表格</title>
+<style>
+:root{--red:#9E2B25;--gold:#C8A45C;--bg:#FBF7F0;--line:#EFE4D6;--gray:#8A8A8A}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:"PingFang SC","Helvetica Neue","WenQuanYi Micro Hei",Arial,sans-serif;
+  font-size:14px;color:#2B2B2B;padding:16px}
+.wrap{max-width:1000px;margin:0 auto}
+h2{font-size:18px;margin:0 0 12px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.stat{flex:1;min-width:96px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+.stat b{display:block;font-size:22px;color:var(--red)}
+.stat span{font-size:12px;color:var(--gray)}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+button{background:var(--red);color:#fff;border:none;border-radius:9px;padding:10px 14px;font-size:14px;cursor:pointer}
+button.gh{background:#fff;color:var(--red);border:1px solid var(--red)}
+button.gray{background:#fff;color:#777;border:1px solid var(--line)}
+input,select{padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;background:#FDFBF7}
+table{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap}
+th,td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left}
+th{background:#FDF6EC;color:#7A3A16}
+.scroll{overflow-x:auto}
+.del{color:#C0392B;cursor:pointer}
+.tip{font-size:12px;color:var(--gray);line-height:1.9}
+.login{max-width:320px;margin:14vh auto;text-align:center}
+.login input{width:100%;margin-bottom:10px}
+.login button{width:100%}
+.tag{display:inline-block;background:var(--red);color:#fff;border-radius:6px;padding:2px 8px;font-size:11px}
+.tag.g{background:#3FA34D}
+.warn{background:#FFF4E2;border:1px solid var(--gold);border-radius:10px;padding:10px 13px;
+  font-size:12.5px;color:#7A5A18;margin-bottom:13px;line-height:1.85}
+.warn b{color:#A32B22}
+#toast{position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);background:rgba(0,0,0,.82);
+  color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;display:none;z-index:200;
+  max-width:80%;text-align:center;line-height:1.6}
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:150;display:none;
+  align-items:center;justify-content:center;padding:18px}
+.mask.on{display:flex}
+.modal{background:#fff;border-radius:14px;padding:18px;width:100%;max-width:460px;
+  max-height:88vh;overflow-y:auto}
+.modal h3{margin:0 0 6px;font-size:17px;color:var(--red)}
+.modal .d{font-size:12.5px;color:#7A6A55;line-height:1.8;margin-bottom:13px}
+.modal button{width:100%;margin-bottom:9px;padding:12px}
+.modal button:last-child{margin-bottom:0}
+.modal .cp{width:100%;height:190px;font-family:monospace;font-size:11px;border:1px solid var(--line);
+  border-radius:8px;padding:9px;margin-bottom:9px;background:#FDFBF7;resize:none}
+.mnote{font-size:12px;color:#8A7A62;margin-bottom:11px;line-height:1.7}
+.cbar{border-radius:10px;padding:10px 13px;font-size:12.5px;line-height:1.8;margin-bottom:13px;
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.cbar.on{background:#EEF7EE;border:1px solid #B8DDB8;color:#2E6B34}
+.cbar.sync{background:#F2F2F2;border:1px solid #DDD;color:#777}
+.cbar.off{background:#FFF4E2;border:1px solid var(--gold);color:#7A5A18}
+.cbar b{font-size:13px}
+.cbar button{padding:5px 11px;font-size:12px;border-radius:7px;background:#fff;color:#555;
+  border:1px solid #CCC;margin-left:auto}
+.cbar.on button{color:#2E6B34;border-color:#B8DDB8}
+.cbar.off button{color:#7A5A18;border-color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="wrap" id="login" style="display:none">
+  <div class="card login">
+    <h2>报名管理端</h2>
+    <input id="pw" type="password" placeholder="请输入管理密码">
+    <button onclick="doLogin()">进 入</button>
+    <p class="tip">初始密码 123456，可在 index.html 顶部 CONFIG.adminPass 修改</p>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div class="mask" id="mask" onclick="if(event.target===this)closeMask()">
+  <div class="modal" id="modal"></div>
+</div>
+
+<div class="wrap" id="panel" style="display:none">
+  <h2>报名数据管理 <span style="font-size:12px;color:var(--gray);font-weight:400">（家长提交后自动汇总到这里）</span></h2>
+  <div id="cloudBar" class="cbar sync">正在连接报名后台…</div>
+  <div id="envWarn"></div>
+  <div class="stats" id="stats"></div>
+  <div class="card">
+    <div class="btns">
+      <button onclick="exportXlsx()">一键导出 Excel 表格</button>
+      <button class="gh" onclick="copyTable()">复制表格（手机上用这个）</button>
+      <button class="gray" onclick="exportCsv()">导出 CSV</button>
+      <button class="gh" onclick="pasteImport()">粘贴导入（邮件 / 微信消息）</button>
+      <button class="gray" onclick="exportJson()">备份 JSON</button>
+      <button class="gray" onclick="document.getElementById('imp').click()">导入备份</button>
+      <button class="gray" onclick="clearAll()">清空数据</button>
+      <input type="file" id="imp" accept=".json" style="display:none" onchange="importJson(event)">
+    </div>
+    <div class="btns">
+      <input id="kw" placeholder="搜索姓名 / 电话 / 班级" oninput="render()" style="flex:1;min-width:160px">
+      <select id="ftype" onchange="render()">
+        <option value="">全部班型</option><option>少年班</option><option>成人班</option>
+      </select>
+      <button class="gray" onclick="location.href='index.html'">返回报名页</button>
+    </div>
+  </div>
+  <div class="card scroll"><table id="tb"></table></div>
+  <p class="tip">★ 需要多人扫码统一汇总？见同目录《使用说明》。本机模式下谁扫码谁存在自己手机里，请用「备份 JSON」回收后导入汇总。</p>
+</div>
+
+<script>
+const PASS='123456';
+const KEY='feiyi_signups';
+const HEAD=['报名编号','班型','学员姓名','性别','年龄','身份','家长/单位','联系电话','社区/小区','上课时间段','时间段代码','所报课程','课程门数','学费(元/学期)','备注','提交时间'];
+const COLS=['no','type','name','sex','age','role','dept','phone','addr','slots','slotKeys','courses','courseCount','fee','note','time'];
+
+function load(){ try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){return []} }
+function save(a){ localStorage.setItem(KEY,JSON.stringify(a)) }
+
+/* ---------- 通用提示 ---------- */
+function toast(m,ms){ const t=document.getElementById('toast'); t.textContent=m;
+  t.style.display='block'; clearTimeout(window.__tt);
+  window.__tt=setTimeout(()=>t.style.display='none', ms||2200); }
+
+/* ---------- 云端同步 ---------- */
+function apiGet(){
+  /* 优先直连数据库（不依赖边缘函数，任何静态托管都能用） */
+  if(SB_URL && SB_KEY){
+    return dbList().then(function(list){
+      return {ok:true, mode:'supabase', list:list, count:list.length};
+    }).catch(function(e){
+      return {ok:false, msg:'读不到数据库：'+e.message+'（请确认表已建、RLS 已关）'};
+    });
+  }
+  return fetch('api/signup?admin='+encodeURIComponent(PASS)).then(r=>r.json());
+}
+/* 后台接口没生效时，直接读数据库（口令只在本地校验，不发出去） */
+const SB_URL = 'https://fwskwwhatmxkadzjxeqb.supabase.co';
+const SB_KEY = 'sb_publishable_8RCYdZWu7mA0VdbAQT6udQ_nZeYr5ac';
+function sbHeaders(){
+  return {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+}
+function fromDb(r){
+  return {no:r.no||'',type:r.type||'',name:r.name||'',sex:r.sex||'',age:r.age||0,
+    role:r.role||'',dept:r.dept||'',phone:r.phone||'',addr:r.addr||'',
+    slots:r.slots||'',slotKeys:r.slotkeys||'',courses:r.courses||'',
+    courseCount:r.coursecount||0,fee:r.fee||0,note:r.note||'',time:r.time||''};
+}
+async function dbList(){
+  const r = await fetch(SB_URL+'/rest/v1/signups?select=*&limit=5000',{method:'GET',headers:sbHeaders()});
+  if(!r.ok) throw new Error('读取失败 '+r.status);
+  const arr = await r.json();
+  return Array.isArray(arr)?arr.map(fromDb):[];
+}
+async function dbDelete(no, clear){
+  let url = SB_URL+'/rest/v1/signups';
+  url += clear ? '?no=neq.__never__' : ('?no=eq.'+encodeURIComponent(no));
+  const r = await fetch(url,{method:'DELETE',headers:sbHeaders()});
+  if(!r.ok) throw new Error('删除失败 '+r.status);
+  return {ok:true};
+}
+function apiPost(rec){
+  return fetch('api/signup',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({rec:rec})}).then(r=>r.json());
+}
+function apiDel(no,clear){
+  if(SB_URL && SB_KEY){
+    return dbDelete(no,clear).catch(function(){return {ok:false};});
+  }
+  return fetch('api/signup',{method:'DELETE',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({admin:PASS,no:no||'',clear:!!clear})}).then(r=>r.json());
+}
+function setCloudBar(state, txt){
+  const el=document.getElementById('cloudBar');
+  if(!el) return;
+  el.className='cbar '+state;
+  const label = state==='on' ? '☁ 已连接报名后台' : state==='sync' ? '⟳ 正在连接…' : '⚠ 未连接报名后台';
+  el.innerHTML = '<b>'+label+'</b><span>'+(txt||'')+'</span>'+
+    '<button onclick="syncCloud(false)">立即刷新</button>';
+  if(state==='off') el.innerHTML += '<button onclick="diag()">查看原因</button>';
+}
+async function syncCloud(silent){
+  setCloudBar('sync','正在连接报名后台…');
+  try{
+    const j = await apiGet();
+    if(!j || !j.ok){
+      const why = (j && j.needKV) ? '后台存储还没绑定' : ((j&&j.msg)||'连接失败');
+      setCloudBar('off', why + '。当前显示的是本机数据。');
+      if(!silent) toast('没连上后台：'+why, 3000);
+      render();
+      return false;
+    }
+    const mode = j.mode || 'none';
+
+    /* ① 真后台数据库：所有人的报名都在这里 */
+    if(mode === 'supabase' || mode === 'kv'){
+      if(!Array.isArray(j.list)){
+        const extra = j.needTable ? '表还没建好，见《接后台数据库》第 3 步' : (j.msg || '');
+        setCloudBar('off', (extra || '没拿到名单') + '。当前显示的是本机数据。');
+        render();
+        return false;
+      }
+      const cloud = j.list;
+      const local = load();
+      const have = new Set(cloud.map(function(r){ return r && r.no; }));
+      const map = new Map();
+      local.forEach(function(r){ if(r && r.no) map.set(r.no, r); });
+      cloud.forEach(function(r){ if(r && r.no) map.set(r.no, r); });
+      const merged = Array.from(map.values());
+      save(merged);
+      const miss = local.filter(function(r){ return r && r.no && !have.has(r.no); });
+      for(const r of miss){ try{ await apiPost(r); }catch(e){} }
+      setCloudBar('on',
+        (mode==='supabase' ? '已接后台数据库' : '已接云端存储') +
+        ' · 全部 '+cloud.length+' 条' +
+        (miss.length ? ('，另补传本机 '+miss.length+' 条') : ''));
+      render();
+      return true;
+    }
+
+    /* ② 邮件模式：报名只发邮箱，不存后台 */
+    if(mode === 'mail'){
+      const local = load();
+      if(!j.configured){
+        setCloudBar('off','邮箱或 Access Key 没填进边缘函数。当前显示的是本机数据。');
+        render(); return false;
+      }
+      setCloudBar('on','✉ 邮件汇总已开启 · 家长提交即发到你邮箱，用「粘贴导入」收进名单'+
+        (local.length?('　（本机另有 '+local.length+' 条）'):''));
+      render(); return true;
+    }
+
+    /* ③ 什么都没配 */
+    setCloudBar('off','后台接口已通，但还没配存储（Supabase / KV / 邮箱都没填）。'+
+      '家长提交只存在他自己手机上，请用「粘贴导入」收集。');
+    render();
+    return false;
+  }catch(e){
+    /* 接口不通 → 直接读数据库 */
+    try{
+      const list = await dbList();
+      const local = load();
+      const have = new Set(list.map(function(r){return r&&r.no;}));
+      const map = new Map();
+      local.forEach(function(r){ if(r&&r.no) map.set(r.no,r); });
+      list.forEach(function(r){ if(r&&r.no) map.set(r.no,r); });
+      const merged = Array.from(map.values());
+      save(merged);
+      const miss = local.filter(function(r){ return r&&r.no&&!have.has(r.no); });
+      for(const r of miss){ try{ await pushDirectSafe(r); }catch(e2){} }
+      setCloudBar('on','已直连后台数据库 · 全部 '+list.length+' 条'+
+        (miss.length?('，另补传本机 '+miss.length+' 条'):''));
+      window.__dbMode = true;
+      render();
+      return true;
+    }catch(e2){
+      setCloudBar('off','后台接口和数据库都连不上。当前显示的是本机数据，收报名请用「粘贴导入」。');
+      render();
+      if(!silent) toast('连不上后台，仍可查看本机数据', 2500);
+      return false;
+    }
+  }
+}
+async function pushDirectSafe(rec){
+  return fetch(SB_URL+'/rest/v1/signups',{method:'POST',headers:sbHeaders(),
+    body:JSON.stringify({no:rec.no,type:rec.type,name:rec.name,sex:rec.sex,age:rec.age,
+      role:rec.role,dept:rec.dept,phone:rec.phone,addr:rec.addr,slots:rec.slots,
+      slotkeys:rec.slotKeys,courses:rec.courses,coursecount:rec.courseCount,
+      fee:rec.fee,note:rec.note,time:rec.time})});
+}
+function diag(){
+  let log='';
+  const add=(s)=>{ log+=s+'\n'; };
+  add('页面地址：'+location.href);
+  add('接口地址：'+new URL('api/signup', location.href).href);
+  fetch('api/signup').then(r=>r.json()).then(j=>{
+    add('无口令访问：'+JSON.stringify(j));
+    return fetch('api/signup?admin='+encodeURIComponent(PASS)).then(r=>r.json());
+  }).then(j=>{
+    add('带口令访问：'+(j&&j.ok?('ok，共 '+j.count+' 条'):JSON.stringify(j)));
+  }).catch(e=>{
+    add('请求失败：'+e.message);
+  }).finally(()=>{
+    openModal('<h3>连接诊断</h3><div class="d">把下面内容截图发给我，我帮你定位。</div>'+
+      '<textarea class="cp" id="cpbox" readonly>'+esc(log)+'</textarea>'+
+      '<button class="gray" onclick="closeMask()">关 闭</button>');
+  });
+}
+function closeMask(){ document.getElementById('mask').classList.remove('on'); }
+function openModal(html){ document.getElementById('modal').innerHTML=html;
+  document.getElementById('mask').classList.add('on'); }
+
+/* ---------- 环境判断 ---------- */
+const UA = navigator.userAgent||'';
+const IS_WX = /MicroMessenger/i.test(UA);
+const IS_IOS = /iPhone|iPad|iPod/i.test(UA) || (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(UA);
+const CAN_DOWNLOAD = 'download' in document.createElement('a');
+const NO_DOWNLOAD = IS_WX || !CAN_DOWNLOAD;
+
+function doLogin(){
+  if(document.getElementById('pw').value===PASS){ localStorage.setItem('feiyi_admin','1'); show(); }
+  else alert('密码不正确');
+}
+function show(){ document.getElementById('login').style.display='none';
+  document.getElementById('panel').style.display='block';
+  const w=document.getElementById('envWarn');
+  if(NO_DOWNLOAD){
+    w.innerHTML = '<div class="warn"><b>当前是在'+(IS_WX?'微信内置浏览器':'手机浏览器')+
+      '里打开，直接下载 Excel 可能被拦截。</b><br>请点绿底的「<b>复制表格</b>」按钮，'+
+      '复制后粘贴到微信聊天框、WPS 或电脑 Excel 里即可，效果一样。</div>';
+  }
+  render(); syncCloud(true); }
+
+function render(){
+  const kw=(document.getElementById('kw').value||'').trim();
+  const ft=document.getElementById('ftype').value;
+  const d=load();
+  const all=d.filter(r=>!kw||JSON.stringify(r).includes(kw)).filter(r=>!ft||r.type===ft);
+
+  const y=d.filter(r=>r.type==='少年班'), s=d.filter(r=>r.type==='成人班');
+  const cnt={};
+  d.forEach(r=>String(r.slotKeys||'').split(',').forEach(c=>{ if(c) cnt[r.type+'-'+c]=(cnt[r.type+'-'+c]||0)+1 }));
+  const ccnt={};
+  d.forEach(r=>String(r.courses||'').split('、').forEach(c=>{ if(c) ccnt[c]=(ccnt[c]||0)+1 }));
+
+  document.getElementById('stats').innerHTML=
+    `<div class="stat"><b>${d.length}</b><span>报名总人数</span></div>
+     <div class="stat"><b>${y.length}</b><span>少年班</span></div>
+     <div class="stat"><b>${s.length}</b><span>成人班</span></div>
+     <div class="stat"><b>${d.reduce((a,r)=>a+(+r.fee||0),0)}</b><span>学费合计(元)</span></div>`
+    + (Object.keys(cnt).length?`<div class="stat" style="flex-basis:100%"><b style="font-size:14px">${
+        Object.keys(cnt).sort().map(k=>k+ '时段 '+cnt[k]+'人').join(' ｜ ')}</b><span>各时间段报名人数</span></div>`:'')
+    + (Object.keys(ccnt).length?`<div class="stat" style="flex-basis:100%"><b style="font-size:14px">${
+        Object.keys(ccnt).map(c=>c+' '+ccnt[c]+'人').join(' ｜ ')}</b><span>各课程报名人数</span></div>`:'');
+
+  let h='<tr><th></th>'+HEAD.map(x=>`<th>${x}</th>`).join('')+'</tr>';
+  h+=all.map(r=>'<tr><td><span class="del" onclick="del(\''+r.no+'\')">删除</span></td>'+
+    COLS.map(c=>`<td>${(r[c]===undefined?'':r[c])}</td>`).join('')+'</tr>').join('');
+  document.getElementById('tb').innerHTML = h || '<tr><td>暂无数据</td></tr>';
+}
+function del(no){
+  if(!confirm('确认删除该条报名？后台也会一并删除。'))return;
+  save(load().filter(r=>r.no!==no));
+  const after = window.__dbMode
+    ? dbDelete(no,false).then(()=>syncCloud(true))
+    : apiDel(no,false).then(()=>syncCloud(true));
+  try{ after.catch(()=>{}); }catch(e){}
+  render();
+}
+function clearAll(){
+  if(!confirm('确认清空全部报名数据？云端也会一起清空，建议先导出备份'))return;
+  save([]);
+  const after = window.__dbMode
+    ? dbDelete('',true).then(()=>syncCloud(true))
+    : apiDel('',true).then(()=>syncCloud(true));
+  try{ after.catch(()=>{}); }catch(e){}
+  render();
+}
+function rows(){ return [HEAD].concat(load().map(r=>COLS.map(c=>r[c]===undefined?'':r[c]))) }
+function dl(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),3000) }
+function stamp(){ const t=new Date(),p=n=>String(n).padStart(2,'0');
+  return t.getFullYear()+p(t.getMonth()+1)+p(t.getDate())+'_'+p(t.getHours())+p(t.getMinutes()) }
+function exportJson(){ dl(new Blob([JSON.stringify(load(),null,2)],{type:'application/json'}),'非遗报名备份_'+stamp()+'.json') }
+function exportCsv(){
+  const csv='\uFEFF'+rows().map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  dl(new Blob([csv],{type:'text/csv;charset=utf-8'}),'非遗报名名单_'+stamp()+'.csv');
+}
+/* 宽松解析：支持 ① 报名页复制格式 ② 邮件正文 ③ 表格(TSV/多空格) */
+const FIELDS = [
+  ['no',       ['报名编号','编号','no','序号']],
+  ['type',     ['班型','班级','班别','type']],
+  ['name',     ['学员姓名','学员','姓名','名字','name']],
+  ['sex',      ['性别','sex']],
+  ['age',      ['年龄','岁数','age']],
+  ['role',     ['身份','学员身份','对象','role']],
+  ['dept',     ['家长','家长姓名','所在单位','所在部门','单位','部门','学校','dept']],
+  ['phone',    ['联系电话','电话','手机','手机号','联系方式','phone']],
+  ['addr',     ['社区','小区','住址','地址','addr']],
+  ['slots',    ['上课时间段','时间段','上课时间','时段','slots']],
+  ['slotKeys', ['时间段代码','时段代码','slotkeys']],
+  ['courses',  ['所报课程','报课','课程','courses']],
+  ['courseCount',['课程门数','门数','courseCount']],
+  ['fee',      ['学费','费用','金额','fee']],
+  ['note',     ['备注','留言','note']],
+  ['time',     ['提交时间','报名时间','时间','time']]
+];
+function norm(s){ return String(s||'').replace(/\s|　/g,''); }
+/* 按别名长度降序，优先精确匹配，避免「时间段代码」被「时间段」抢走 */
+const PAIRS = [];
+FIELDS.forEach(function (p) {
+  p[1].forEach(function (n) { PAIRS.push([p[0], n]); });
+});
+PAIRS.sort(function (a, b) { return norm(b[1]).length - norm(a[1]).length; });
+
+function fieldOf(k){
+  k = norm(k).toLowerCase();
+  if(!k) return null;
+  let i, n;
+  for(i=0;i<PAIRS.length;i++){ n = norm(PAIRS[i][1]).toLowerCase(); if(k === n) return PAIRS[i][0]; }
+  for(i=0;i<PAIRS.length;i++){ n = norm(PAIRS[i][1]).toLowerCase(); if(n.length>=2 && k.indexOf(n) === 0) return PAIRS[i][0]; }
+  for(i=0;i<PAIRS.length;i++){ n = norm(PAIRS[i][1]).toLowerCase(); if(n.length>=2 && k.indexOf(n) >= 0) return PAIRS[i][0]; }
+  return null;
+}
+
+function isNum(v){ return /^-?\d+(\.\d+)?$/.test(String(v).trim()); }
+function intOf(v){ const m = String(v).replace(/[^\d.]/g,''); return m ? Number(m) : 0; }
+
+function parseText(text){
+  text = String(text||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  const lines = text.split('\n');
+  const out = [];
+  /* ---------- 模式 A：表格（含 tab 或多空格分隔且首行像表头） ---------- */
+  const tabbed = lines.filter(l => l.indexOf('\t') >= 0);
+  if(tabbed.length >= 2){
+    const head = lines[0].split('\t').map(s=>s.trim());
+    const cols = head.map(fieldOf);
+    if(cols.filter(Boolean).length >= 3){
+      for(let i=1;i<lines.length;i++){
+        const cells = lines[i].split('\t');
+        if(!cells.join('').trim()) continue;
+        const r = {};
+        cols.forEach((f,ci)=>{ if(f && cells[ci]!==undefined) r[f]=String(cells[ci]).trim(); });
+        if(r.name || r.no){ out.push(fix(r)); }
+      }
+      if(out.length) return out;
+    }
+  }
+  /* ---------- 模式 B：键值行 ---------- */
+  let cur = null;
+  const push = ()=>{ if(cur && (cur.name || cur.no)) out.push(fix(cur)); };
+  for(const raw of lines){
+    const line = raw.trim();
+    if(!line) continue;
+    if(line.indexOf('【') === 0){ push(); cur = {}; continue; }   // 新一段
+    const m = line.match(/^([^:：]{1,12})\s*[:：]\s*(.*)$/);
+    if(!m){                                    // 无冒号：可能是续行
+      if(cur && !line.match(/^[—\-－=＝\s]*$/)) { /* 忽略或并入备注 */
+        if(!cur.__junk) cur.__junk = []; cur.__junk.push(line);
+      }
+      continue;
+    }
+    let k = m[1], v = m[2].trim();
+    const f = fieldOf(k);
+    if(!f) continue;
+    /* 一个键里塞了两个字段：性别 / 年龄：男 / 18岁 */
+    if(/性别[^:：]{0,4}年龄/.test(k)){
+      const mm = v.match(/([男女])\s*[\/,，、\s]*\s*(\d{1,3})/);
+      if(!cur) cur = {};
+      if(mm){ cur.sex = mm[1]; cur.age = Number(mm[2]); }
+      else cur.sex = v;
+      continue;
+    }
+    /* 空值占位符 → 置空 */
+    if(/^[（(【\[]?\s*(未填|无|无。|没有|空|N\/A|n\/a|-|—)\s*[)）】\]]?[。.．]?$/.test(v)) v = '';
+    if(f === 'no' && cur && cur.no){ push(); cur = {}; }   // 又出现编号 → 新记录
+    if(!cur) cur = {};
+    // 姓名行常带性别年龄，如 "刘小明（女，18岁）"
+    if(f === 'name'){
+      const mm = v.match(/^(.+?)[（(【\[]?([男女])[，,、\s]*(\d{1,3})\s*岁?[)）】\]]?$/);
+      if(mm){ if(!cur.sex) cur.sex = mm[2]; if(cur.age===undefined) cur.age = Number(mm[3]); v = mm[1].trim(); }
+    }
+    cur[f] = (cur[f] && cur[f] !== v && f==='note') ? (cur[f]+'；'+v) : (cur[f] || v);
+  }
+  push();
+  return out;
+}
+function fix(r){
+  delete r.__junk;
+  const o = {
+    no: String(r.no||'').trim(),
+    type: String(r.type||'').trim(),
+    name: String(r.name||'').trim(),
+    sex: String(r.sex||'').trim(),
+    age: r.age!==undefined ? (isNum(r.age)?Number(r.age):intOf(r.age)) : 0,
+    role: String(r.role||'').trim(),
+    dept: String(r.dept||'').trim(),
+    phone: String(r.phone||'').trim(),
+    addr: String(r.addr||'').trim(),
+    slots: String(r.slots||'').trim(),
+    slotKeys: String(r.slotKeys||'').trim(),
+    courses: String(r.courses||'').trim(),
+    courseCount: r.courseCount!==undefined ? intOf(r.courseCount) : (String(r.courses||'').split(/[、,，\/]/).filter(Boolean).length),
+    fee: r.fee!==undefined ? intOf(r.fee) : 0,
+    note: String(r.note||'').trim(),
+    time: String(r.time||'').trim()
+  };
+  if(!o.no) o.no = 'IMP' + Date.now().toString().slice(-6) + Math.floor(Math.random()*900+100);
+  if(!o.slotKeys && o.slots){
+    const ks = (o.slots.match(/[ABCD]\s*(?=周|[单双])/g) || o.slots.match(/\b[ABCD]\b/g) || []);
+    o.slotKeys = Array.from(new Set(ks.map(s=>s.trim().charAt(0)))).join(',');
+  }
+  if(!o.slotKeys && /[ABCD]/.test(o.slots)) {
+    const ks = o.slots.match(/[ABCD]/g) || [];
+    o.slotKeys = Array.from(new Set(ks)).join(',');
+  }
+  return o;
+}
+
+/* ---------- 以下不用改 ---------- */
+/* ---------- 粘贴导入：把邮件正文 / 微信里收到的报名粘进来 ---------- */
+const FIELDS_INLINE_PLACEHOLDER = 1;
+
+function pasteImport(){
+  openModal('<h3>粘贴报名信息</h3>'+
+    '<div class="d">把下面任意一种内容粘进来，一次可以粘多条：<br>'+
+    '① 家长点「复制报名信息」发来的文本　② 邮箱里的报名邮件正文<br>'+
+    '③ 从 Excel / WPS 里复制的表格</div>'+
+    '<textarea class="cp" id="pasteBox" placeholder="在这里粘贴…（Windows 按 Ctrl+V，手机长按粘贴）"></textarea>'+
+    '<button onclick="doParse()">解 析</button>'+
+    '<button class="gray" onclick="closeMask()">取 消</button>');
+  setTimeout(function(){ var b=document.getElementById('pasteBox'); if(b) b.focus(); },300);
+}
+
+function doParse(){
+  const box=document.getElementById('pasteBox');
+  const txt=(box&&box.value||'').trim();
+  if(!txt){ toast('请先粘贴内容'); return; }
+  let list=[];
+  try{ list=parseText(txt); }catch(e){ list=[]; }
+  if(!list.length){
+    openModal('<h3>没能识别出报名信息</h3>'+
+      '<div class="d">请确认粘贴的内容里含有「姓名」和「电话」这类字段。<br>'+
+      '下面是粘贴的内容（可截图发我帮你改）：</div>'+
+      '<textarea class="cp" readonly>'+esc(txt.slice(0,800))+'</textarea>'+
+      '<button onclick="pasteImport()">重新粘贴</button>'+
+      '<button class="gray" onclick="closeMask()">关 闭</button>');
+    return;
+  }
+  const cur=load(), have=new Set(cur.map(function(r){return String(r.no);}));
+  let add=0, dup=0;
+  list.forEach(function(r){ if(have.has(r.no)){dup++;} else {cur.push(r); have.add(r.no); add++;} });
+  openModal('<h3>解析成功</h3>'+
+    '<div class="d">共识别 <b>'+list.length+'</b> 条，其中新增 <b style="color:#3FA34D">'+add+
+    '</b> 条'+(dup?('，重复 '+dup+' 条已跳过'):'')+'。</div>'+
+    '<textarea class="cp" readonly>'+esc(list.map(function(r){
+      return [r.no,r.type,r.name,r.sex,r.age,r.role,r.phone,r.slots,r.courses,r.fee+'元'].join(' | ');
+    }).join('\n'))+'</textarea>'+
+    '<button onclick="confirmImport('+add+')">确认并入名单</button>'+
+    '<button class="gray" onclick="closeMask()">取 消</button>');
+  window.__pending = cur;
+}
+function confirmImport(add){
+  save(window.__pending || load());
+  window.__pending=null; closeMask(); render();
+  toast('已并入 '+add+' 条，现在可以导出 Excel 了',3000);
+  try{ syncCloud(true); }catch(e){}
+}
+
+function importJson(e){
+  const f=e.target.files[0]; if(!f)return; const rd=new FileReader();
+  rd.onload=()=>{ try{ const arr=JSON.parse(rd.result); if(!Array.isArray(arr))throw 0;
+    const cur=load(),nos=new Set(cur.map(r=>r.no));
+    arr.forEach(r=>{ if(!nos.has(r.no)) cur.push(r) });
+    save(cur); render(); alert('已导入 '+arr.length+' 条（自动去重）');
+  }catch(err){ alert('文件格式不正确') } };
+  rd.readAsText(f); e.target.value='';
+}
+
+/* ---------- 极简 XLSX 生成（纯前端，无需联网） ---------- */
+const CRCT=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;
+  for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[n]=c>>>0}return t})();
+function crc32(u){let c=0xFFFFFFFF;for(let i=0;i<u.length;i++)c=CRCT[(c^u[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function zip(files){
+  const enc=new TextEncoder(),parts=[],cen=[];let off=0;const d=new Date();
+  const tm=((d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1))&0xFFFF;
+  const dt=(((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate())&0xFFFF;
+  files.forEach(f=>{
+    const nm=enc.encode(f.name),data=f.data,crc=crc32(data);
+    const lh=new Uint8Array(30+nm.length),lv=new DataView(lh.buffer);
+    lv.setUint32(0,0x04034b50,true);lv.setUint16(4,20,true);lv.setUint16(6,0x0800,true);
+    lv.setUint16(8,0,true);lv.setUint16(10,tm,true);lv.setUint16(12,dt,true);
+    lv.setUint32(14,crc,true);lv.setUint32(18,data.length,true);lv.setUint32(22,data.length,true);
+    lv.setUint16(26,nm.length,true);lv.setUint16(28,0,true);lh.set(nm,30);
+    parts.push(lh,data);
+    const ch=new Uint8Array(46+nm.length),cv=new DataView(ch.buffer);
+    cv.setUint32(0,0x02014b50,true);cv.setUint16(4,20,true);cv.setUint16(6,20,true);
+    cv.setUint16(8,0x0800,true);cv.setUint16(10,0,true);cv.setUint16(12,tm,true);cv.setUint16(14,dt,true);
+    cv.setUint32(16,crc,true);cv.setUint32(20,data.length,true);cv.setUint32(24,data.length,true);
+    cv.setUint16(28,nm.length,true);cv.setUint32(42,off,true);ch.set(nm,46);
+    cen.push(ch); off+=lh.length+data.length;
+  });
+  const cs=cen.reduce((a,b)=>a+b.length,0),end=new Uint8Array(22),ev=new DataView(end.buffer);
+  ev.setUint32(0,0x06054b50,true);ev.setUint16(8,files.length,true);ev.setUint16(10,files.length,true);
+  ev.setUint32(12,cs,true);ev.setUint32(16,off,true);
+  return new Blob([...parts,...cen,end],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function sheetXml(data){
+  let x='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+  data.forEach((row,ri)=>{
+    x+=`<row r="${ri+1}">`;
+    row.forEach((v,ci)=>{
+      const ref=String.fromCharCode(65+ci)+(ri+1);
+      if(typeof v==='number'&&v!=='') x+=`<c r="${ref}"><v>${v}</v></c>`;
+      else x+=`<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
+    });
+    x+='</row>';
+  });
+  return x+'</sheetData></worksheet>';
+}
+function exportXlsx(){
+  const data=rows(); if(data.length<2){alert('暂无报名数据');return}
+  const out=makeXlsx();
+  dl(out.blob, out.name);
+  if(NO_DOWNLOAD){ afterExport(out); }
+  else { toast('已生成 '+out.name+'，若没看到下载，点绿底的「复制表格」'); }
+}
+
+/* ---------- 手机可用：复制 / 分享 / 打印 ---------- */
+function tsvText(){ return rows().map(r=>r.map(v=>String(v===undefined?'':v).replace(/[\t\r\n]/g,' ')).join('\t')).join('\n') }
+
+function copyTable(){
+  const t=tsvText();
+  if(navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext){
+    navigator.clipboard.writeText(t).then(
+      ()=>toast('已复制！去微信聊天框、WPS 或电脑 Excel 里粘贴即可',3000),
+      ()=>legacyCopy(t));
+  } else legacyCopy(t);
+}
+function legacyCopy(t){
+  const ta=document.createElement('textarea');
+  ta.value=t; ta.style.position='fixed'; ta.style.left='-9999px';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  ta.setSelectionRange(0, t.length);
+  let ok=false; try{ ok=document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta);
+  if(ok){ toast('已复制！粘贴到微信、WPS 或 Excel 即可',3000); }
+  else manualCopy(t);
+}
+function manualCopy(t){
+  openModal('<h3>手动复制</h3><div class="d">浏览器不允许自动复制，请：<b>长按下面的框 → 全选 → 拷贝</b>，'+
+    '再粘贴到微信、WPS 或 Excel。</div><textarea class="cp" id="cpbox" readonly>'+esc(t)+'</textarea>'+
+    '<button class="gray" onclick="closeMask()">关 闭</button>');
+  setTimeout(()=>{ const b=document.getElementById('cpbox');
+    if(b){ b.focus(); b.select(); } },300);
+}
+
+function afterExport(out){
+  const canShare = !!(navigator.canShare && navigator.share);
+  openModal('<h3>Excel 已生成</h3>'+
+    '<div class="d">'+(IS_WX?'微信内置浏览器不支持下载文件。':'当前浏览器不支持直接下载。')+
+    '选下面任意一种方式把名单拿出来：</div>'+
+    '<button onclick="copyTable();closeMask()">① 复制表格（最稳，推荐）</button>'+
+    (canShare?'<button class="gh" onclick="shareXlsx()">② 分享文件（存到手机 / 发微信）</button>':'')+
+    '<button class="gray" onclick="printTable()">③ 打印 / 存成 PDF</button>'+
+    '<button class="gray" onclick="closeMask()">关 闭</button>'+
+    '<div class="mnote" style="margin-top:11px">提示：电脑上打开本页直接点「一键导出 Excel」就能下载。</div>');
+  window.__xlsx = out;
+}
+function shareXlsx(){
+  try{
+    const f=new File([window.__xlsx.blob], window.__xlsx.name,
+      {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    if(navigator.canShare({files:[f]})){
+      navigator.share({files:[f], title:'非遗报名名单'}).then(()=>closeMask()).catch(()=>{});
+    } else { toast('这个浏览器不支持分享文件，请改用「复制表格」',3000); }
+  }catch(e){ toast('分享失败，请改用「复制表格」',3000); }
+}
+function printTable(){
+  const data=rows();
+  const h='<!DOCTYPE html><html><head><meta charset="utf-8"><title>报名名单</title><style>'+
+    'body{font-family:sans-serif;font-size:12px;padding:10px}h2{font-size:16px;margin:0 0 10px}'+
+    'table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:4px 5px;text-align:left}'+
+    'th{background:#EEE}@media print{button{display:none}}</style></head><body>'+
+    '<h2>非遗公益培训报名名单</h2><table>'+
+    data.map((r,i)=>'<tr>'+r.map(v=>i?'<td>'+esc(v)+'</td>':'<th>'+esc(v)+'</th>').join('')+'</tr>').join('')+
+    '</table></body></html>';
+  const w=window.open('','_blank');
+  if(!w){ toast('新窗口被拦截了，请改用「复制表格」',3000); return; }
+  try{ w.document.write(h); w.document.close();
+    setTimeout(()=>{ try{ w.print(); }catch(e){} },400);
+  }catch(e){ toast('打开失败，请改用「复制表格」',3000); }
+}
+
+function makeXlsx(){
+  const data=rows();
+  const enc=new TextEncoder();
+  const files=[
+    {name:'[Content_Types].xml',data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
+      '<Default Extension="xml" ContentType="application/xml"/>'+
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'+
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+
+      '</Types>')},
+    {name:'_rels/.rels',data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'+
+      '</Relationships>')},
+    {name:'xl/workbook.xml',data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '+
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
+      '<sheets><sheet name="报名名单" sheetId="1" r:id="rId1"/></sheets></workbook>')},
+    {name:'xl/_rels/workbook.xml.rels',data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'+
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'+
+      '</Relationships>')},
+    {name:'xl/styles.xml',data:enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+      '<fonts count="1"><font><sz val="11"/><name val="等线"/></font></fonts>'+
+      '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>'+
+      '<borders count="1"><border/></borders>'+
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+      '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>'+
+      '</styleSheet>')},
+    {name:'xl/worksheets/sheet1.xml',data:enc.encode(sheetXml(data))}
+  ];
+  return { blob: zip(files), name:'非遗公益培训报名名单_'+stamp()+'.xlsx' };
+}
+if(localStorage.getItem('feiyi_admin')==='1') show(); else document.getElementById('login').style.display='block';
+</script>
+</body>
+</html>
